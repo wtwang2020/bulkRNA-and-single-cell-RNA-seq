@@ -1,0 +1,95 @@
+#####版本R4.3.1########
+#####要求数据，limma差异后的dataframe，主要有用的列：基因名,logFC,adj.P.val#########
+#############加载数据后nrDEG_limma_voom记得改为自己数据名
+library(ggplot2)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(stats)
+library(data.table)
+library(dplyr)
+load("D:/课本/与同学的合作项目/我自己/膀胱癌预后文章复现/数据/TCGA矩阵/nrDEG_limma_voom.Rdata")
+DEG_data <- nrDEG_limma_voom
+##差异基因筛选，这里选择abs(logFC) > 2,FDR < 0.05的值作为差异基因。也可以根据自己的情况进行设定
+DEG_data$group <- case_when(
+DEG_data$logFC > 2 & DEG_data$adj.P.Val < 0.05 ~ "up",
+DEG_data$logFC< -2 & DEG_data$adj.P.Val < 0.05 ~ "down",
+abs(DEG_data$logFC) <= 2 ~ "none",
+DEG_data$adj.P.Val >= 0.05 ~ "none")
+up <- rownames(DEG_data)[DEG_data$group=="up"]
+down <- rownames(DEG_data)[DEG_data$group=="down"]
+diff <- c(up,down)
+columns(org.Hs.eg.db)
+up
+up_entrez <- bitr(up,
+                  fromType = "SYMBOL",#现有的ID类型
+                  toType = "ENTREZID",#需转换的ID类型
+                  OrgDb = "org.Hs.eg.db")
+head(up_entrez)
+#down（同上）：
+down_entrez <- bitr(down,
+                    fromType = "SYMBOL",
+                    toType = "ENTREZID",
+                    OrgDb = "org.Hs.eg.db")
+
+#diff（同上）：
+diff_entrez <- bitr(diff,
+                    fromType = "SYMBOL",
+                    toType = "ENTREZID",
+                    OrgDb = "org.Hs.eg.db")
+#KEGG富集分析，我们以总差异基因(diff_entrez)为例：
+head(diff_entrez)
+KEGG_diff <- enrichKEGG(gene = diff_entrez$ENTREZID,
+                        organism = "hsa",#物种，Homo sapiens (human)
+                        pvalueCutoff = 0.05,
+                        qvalueCutoff = 0.05)
+KEGG_result <- KEGG_diff@result
+#gene <- rownames(DEG_data)[(abs(DEG_data$logFC) > 1 & DEG_data$adj.P.Val < 0.05)]
+#DEG_data$gene <- rownames(DEG_data)
+#DEG_data <- DEG_data[, c(7, 1:6)]
+#Gene名转化为GeneID
+gene.df <- bitr(DEG_data$gene, fromType = "SYMBOL", #fromType是指你的数据ID类型是属于哪一类的
+                toType = c("ENTREZID", "SYMBOL"), #toType是指你要转换成哪种ID类型，可以写多种，也可以只写一种
+                OrgDb = org.Hs.eg.db) #Orgdb是指对应的注释包是哪个
+colnames(gene.df)[1] <- "gene"
+DEG_data1 <- left_join(gene.df,DEG_data)
+
+## 自带的绘图
+## 自带的绘图
+## 条形图
+barplot(KEGG_diff, drop = TRUE, showCategory = 15,color = "p.adjust",title = "KEGG Pathway")
+## 气泡图
+dotplot(KEGG_diff, showCategory=15)
+
+# 根据p-value值排序，选择显著的通路或功能（这里设定阈值为0.05）
+significant_pathways <- subset(KEGG_result, p.adjust < 0.05)
+
+# 绘制基于ggplot2的条形图
+ggplot(significant_pathways, aes(x = reorder(Description, -log10(p.adjust)), y = -log10(p.adjust))) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(title = "KEGG Pathway Enrichment Analysis",
+       x = "Pathway",
+       y = "-log10(P-value)") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  coord_flip()
+
+
+
+# 设置颜色的阶梯和对应的颜色
+significant_pathways$pvalue_group <- cut(significant_pathways$p.adjust, breaks = c(0, 0.001, 0.01, 0.05), 
+                                         labels = c("p < 0.001", "0.001 <= p < 0.01", "0.01 <= p < 0.05"))
+
+# 绘制基于ggplot2的气泡图
+ggplot(significant_pathways, aes(x = reorder(Description, -log10(p.adjust)), y = -log10(p.adjust))) +
+  geom_point(aes(size = Count, color = pvalue_group), alpha = 0.7) +
+  scale_size_continuous(range = c(1, 10)) +
+  labs(title = "KEGG Pathway Enrichment Analysis",
+       x = "Pathway",
+       y = "-log10(P-value)",
+       size = "Count",
+       color = "P-value") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  coord_flip()+
+  scale_color_manual(values = c("p < 0.001" = "#DC0000B2", "0.001 <= p < 0.01" = "#F39B7FB2", "0.01 <= p < 0.05" = "#4DBBD5B2"))
+
+
+
