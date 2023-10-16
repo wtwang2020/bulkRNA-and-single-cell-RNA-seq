@@ -1,6 +1,7 @@
 #####版本R4.3.1########
 #####要求数据，limma差异后的dataframe，主要有用的列：基因名,logFC,adj.P.val#########
 ###########################数据输入区#########################################
+limma_DATA <- "D:/课本/与同学的合作项目/我自己/膀胱癌预后文章复现/数据/TCGA矩阵/nrDEG_limma_voom.Rdata"
 ##############################################################################
 #############加载数据后nrDEG_limma_voom记得改为自己数据名
 library(ggplot2)
@@ -9,7 +10,7 @@ library(org.Hs.eg.db)
 library(stats)
 library(data.table)
 library(dplyr)
-load("D:/课本/与同学的合作项目/我自己/膀胱癌预后文章复现/数据/TCGA矩阵/nrDEG_limma_voom.Rdata")
+load(limma_DATA)
 DEG_data <- nrDEG_limma_voom
 ##差异基因筛选，这里选择abs(logFC) > 2,FDR < 0.05的值作为差异基因。也可以根据自己的情况进行设定
 DEG_data$group <- case_when(
