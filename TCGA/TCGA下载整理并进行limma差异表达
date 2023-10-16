@@ -1,12 +1,14 @@
 ## 没安装包小伙伴先安装一下
-######01表示原发肿瘤样本，11表示正常样本，06表示转移样本这里无统计转移样本
+######01表示原发肿瘤样本，11表示正常样本，06表示转移样本这里无统计转移样本，处理后参生TCGA矩阵，矩阵样本注释，矩阵limma差异以及显著性基因
 #BiocManager::install("GDCRNATools")
 library(GDCRNATools)
 ## 一、数据处理与下载----
+##################数据输入区##############################################
 project <- 'TCGA-BLCA'
 TCGA_downloadpath <- 'D:/课本/与同学的合作项目/我自己/膀胱癌预后文章复现/数据'
 sample_sheet_name <- "gdc_sample_sheet.2023-10-14.tsv" #下载后才知道
 one_of_the_count_tsv <- "54d3e578-c36e-4a04-b3b8-d6e40de39c6a/65624a21-6b3a-46e1-bc5d-1fd0a071cb52.rna_seq.augmented_star_gene_counts.tsv" #打开其中的一个文件，注意/
+###########################################################################
 ## 下载表达矩阵
 setwd(TCGA_downloadpath)
 #gdcRNADownload(project.id = project, data.type = 'RNAseq', 
