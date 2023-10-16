@@ -1,25 +1,26 @@
 ## 没安装包小伙伴先安装一下
-BiocManager::install("GDCRNATools")
+######01表示原发肿瘤样本，11表示正常样本，06表示转移样本这里无统计转移样本
+#BiocManager::install("GDCRNATools")
 library(GDCRNATools)
 ## 一、数据处理与下载----
 project <- 'TCGA-BLCA'
+TCGA_downloadpath <- 'D:/课本/与同学的合作项目/我自己/膀胱癌预后文章复现/数据'
+sample_sheet_name <- "gdc_sample_sheet.2023-10-14.tsv" #下载后才知道
+one_of_the_count_tsv <- "54d3e578-c36e-4a04-b3b8-d6e40de39c6a/65624a21-6b3a-46e1-bc5d-1fd0a071cb52.rna_seq.augmented_star_gene_counts.tsv" #打开其中的一个文件，注意/
 ## 下载表达矩阵
-gdcRNADownload(project.id = project, data.type = 'RNAseq', 
-               directory = 'D:/课本/与同学的合作项目/我自己/膀胱癌预后文章复现/数据')
+setwd(TCGA_downloadpath)
+#gdcRNADownload(project.id = project, data.type = 'RNAseq', 
+#               directory = TCGA_downloadpath)
 
 #新建文件夹，用于分类存储数据。txt需使用Notepad软件打开，没有此软件的可以联系免费获取。
-dir.create('RawData/') ##用于存储count/TPM/差异表达矩阵等txt格式
-dir.create('RawData/csv/')##用于存储csv格式的矩阵，便于打开查看
-
+if (!file.exists("RawData")) {
+  dir.create("RawData")
+}                           ##用于存储count/TPM/差异表达矩阵等txt格式
 #####本文将获得tumor样本在前，normal样本在后的Count矩阵和TPM矩阵-----####
-
 library(data.table)
 library(dplyr)
-setwd("D:/课本/与同学的合作项目/我自己/膀胱癌预后文章复现/代码")
 ##读取样本文件信息存储到sample_sheet,注意这里更改你自己的文件名
-#sample_sheet <- fread("./gdc_sample_sheet.2023-08-31.tsv")
-setwd("D:/课本/与同学的合作项目/我自己/膀胱癌预后文章复现/数据")
-sample_sheet <- fread("gdc_sample_sheet.2023-10-14.tsv")
+sample_sheet <- fread(sample_sheet_name)
 ##取样本ID的前15个字符，例如：TCGA-DD-AACK-01,作为样本的barcode
 ##获取Barcode添加到sample_sheet的最后一列
 sample_sheet$Barcode <- substr(sample_sheet$`Sample ID`,1,15)
@@ -29,21 +30,20 @@ sample_sheet1 <- sample_sheet %>% filter(!duplicated(sample_sheet$Barcode))
 
 ##根据Barcode最后两位筛选样本，01表示原发肿瘤样本，11表示正常样本，06表示转移样本
 sample_sheet2 <- sample_sheet1 %>% filter(grepl("01$|11$|06$",sample_sheet1$Barcode))
-
+TCGA_anominate <- sample_sheet2
 ##创建一个数据框，包含"gene_id","gene_name","gene_type"三列，用于后续样本合并
 #随意打开一个RawMatrix下面的文件夹及里面文件，注意更改你自己的文件名
-TCGA_BLCA_Exp <- fread("D:/课本/与同学的合作项目/我自己/膀胱癌预后文章复现/数据/54d3e578-c36e-4a04-b3b8-d6e40de39c6a/65624a21-6b3a-46e1-bc5d-1fd0a071cb52.rna_seq.augmented_star_gene_counts.tsv")
+TCGA_BLCA_Exp <- fread(paste0("./",one_of_the_count_tsv))
 TCGA_BLCA_Exp <- TCGA_BLCA_Exp[!1:4,c("gene_id","gene_name","gene_type")]
 ##根据样本的文件信息，将所有样本合并成一个数据框
 #####项目路径
-setwd("D:/课本/与同学的合作项目/我自己/膀胱癌预后文章复现")
 for (i in 1:nrow(sample_sheet2)) {
   
   folder_name <- sample_sheet2$`File ID`[i]
   file_name <- sample_sheet2$`File Name`[i]
   sample_name <- sample_sheet2$Barcode[i]
   
-  data1 <- fread(paste0("./数据/",folder_name,"/",file_name))
+  data1 <- fread(paste0("./",folder_name,"/",file_name))
   #unstranded代表count值；如果要保存TPM，则改为tpm_unstranded
   data2 <- data1[!1:4,c("gene_id","gene_name","gene_type","unstranded")] 
   colnames(data2)[4] <- sample_name
@@ -60,7 +60,7 @@ Test_Expr <- TCGA_BLCA_Exp[,-c(1,3)]
 Test_Expr <- as.data.frame(Test_Expr)
 #对重复基因名取平均表达量，然后将基因名作为行名
 Test_Expr = avereps(Test_Expr[,-1],ID = Test_Expr$gene_name) #也可以不取平均，直接删除一个重复的基因表达数据
-
+TCGA_Expr_data <- Test_Expr
 #去除低表达的基因
 Test_Expr = Test_Expr[rowMeans(Test_Expr)>1,] #根据自己的需要去除低表达基因，也可以卡其它阈值
 
@@ -108,9 +108,12 @@ nrDEG_limma_voom <- na.omit(nrDEG_limma_voom)
 library(dplyr)
 #这里使用logFC > 2 且adj.P.Val < 0.05的作为差异基因，可以根据自己需求调整。
 nrDEG_limma_voom_signif <- nrDEG_limma_voom %>% filter(logFC > 2) %>% filter(adj.P.Val < 0.05)
-save(nrDEG_limma_voom,file = 'D:/课本/与同学的合作项目/我自己/膀胱癌预后文章复现/数据/TCGA矩阵/nrDEG_limma_voom.Rdata')
-save(nrDEG_limma_voom_signif,file = 'D:/课本/与同学的合作项目/我自己/膀胱癌预后文章复现/数据/TCGA矩阵/nrDEG_limma_voom_signif.Rdata')
-save(TCGA_BLCA_Exp,file = 'D:/课本/与同学的合作项目/我自己/膀胱癌预后文章复现/数据/TCGA矩阵/TCGA_BLCA_Exp.Rdata')
+save(nrDEG_limma_voom,file = "./RawData/nrDEG_limma_voom.Rdata")
+save(nrDEG_limma_voom_signif,file = "./RawData/nrDEG_limma_voom_signif.Rdata")
+#save(TCGA_BLCA_Exp,file = "./RawData/TCGA_BLCA_Exp.Rdata")
+#原始矩阵和注释
+save(TCGA_BLCA_Exp,file = "./RawData/TCGA_Expr_data只进行重复名合并.Rdata")
+save(TCGA_BLCA_Exp,file = "./RawData/TCGA_anominate.Rdata")
 
 #保存csv文件格式的全部差异基因
 #write.csv(nrDEG_limma_voom, file = "./RawData/limma/all_limma.csv", row.names = TRUE)
