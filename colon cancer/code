@@ -1,0 +1,1325 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+# the basis components and library the packages
+```{r warning = TRUE, include = FALSE}
+setwd("/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/colon_cancer")
+Sys.setenv(LANGUAGE = "en")
+library(copykat)
+library(scCustomize)
+library(Seurat)
+library(ggplot2)
+library(clustree)
+library(cowplot)
+library(dplyr)
+library(R.utils)
+library(data.table)
+library(scCustomize)
+library(R.utils)
+packageVersion("Seurat")
+library(Seurat)
+library(stringr)
+library(ggplot2)
+library(grid)
+library(gtools)
+library(clustree)
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(patchwork)
+library(cols4all)
+library(viridis)
+library(tidyverse)
+library(magrittr)
+library(reshape2)
+library(ggsci)
+library(data.table)
+library(org.Hs.eg.db)
+library(enrichplot)
+library(msigdbr)
+library(clusterProfiler)
+library(GSEABase)
+library(survival)
+library(survminer)
+library(limma)
+library(My.stepwise)
+library(tinyarray)
+library(readxl)
+library(NMF)
+library(estimate)
+library(infercnv)
+Sys.setenv(JAGS_HOME=" /home/bioinfo/.conda/envs/wangweitao/bin/jags")
+
+```
+# 读取数据
+```{r}
+GSE132465=fread( '/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/colon_cancer/data/raw_data/GSE132465_GEO_processed_CRC_10X_raw_UMI_count_matrix.txt.gz',data.table = F)
+
+GSE_5784 <- Read10X_GEO(data_dir = "/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/colon_cancer/data/raw_data/mCRC_scRNA_filtered/5784_mCRC")
+GSE_5915 <- Read10X_GEO(data_dir = "/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/colon_cancer/data/raw_data/mCRC_scRNA_filtered/5915_mCRC")
+GSE_6198 <- Read10X_GEO(data_dir = "/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/colon_cancer/data/raw_data/mCRC_scRNA_filtered/6198_mCRC")
+GSE_6335 <- Read10X_GEO(data_dir = "/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/colon_cancer/data/raw_data/mCRC_scRNA_filtered/6335_mCRC")
+GSE_6593 <- Read10X_GEO(data_dir = "/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/colon_cancer/data/raw_data/mCRC_scRNA_filtered/6593_mCRC")
+GSE_6648 <- Read10X_GEO(data_dir = "/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/colon_cancer/data/raw_data/mCRC_scRNA_filtered/6648_mCRC")
+GSE_8640 <- Read10X_GEO(data_dir = "/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/colon_cancer/data/raw_data/mCRC_scRNA_filtered/8640_mCRC")
+
+```
+
+# 整合GSE132465
+```{r}
+rownames(GSE132465) <- GSE132465$Index
+GSE132465 <- GSE132465 %>%
+        select(-Index)
+# 获取列名的前7个字符
+col_prefix <- substr(colnames(GSE132465), 1, 7)
+# 根据前7个字符切割数据框
+split_data <- lapply(unique(col_prefix), function(prefix) {
+  selected_columns <- grep(paste0("^", prefix), colnames(GSE132465))
+  GSE132465 %>%
+    select(all_of(selected_columns))
+})
+# 对切割后的数据框进行命名
+names(split_data) <- unique(col_prefix)
+
+# 假设 split_data 是之前切割得到的数据框列表
+split_data <- lapply(split_data, function(df) {
+  if (any(substr(names(df), 7, 7) != "N")) {
+    return(df)
+  } else {
+    return(NULL)
+  }
+})
+# 去除 NULL 值
+split_data <- split_data[!sapply(split_data, is.null)]
+
+seurat_obj_list_GSE132465 <- list()
+# 假设 split_data 是你的数据框列表
+for (df_name in names(split_data)) {
+  # 从数据框列表中获取数据框
+  df <- split_data[[df_name]]
+
+  # 创建 Seurat 对象
+  seurat_obj <- CreateSeuratObject(counts = df, project = df_name, min.cells = 3, min.features = 200)
+
+  # 将 Seurat 对象保存在一个列表中，可以根据需要进一步处理
+  seurat_obj_list_GSE132465[[df_name]] <- seurat_obj
+}
+
+
+```
+# 整合GSE144735
+
+```{r}
+# rownames(GSE144735) <- GSE144735$Index
+# GSE144735 <- GSE144735 %>%
+#         select(-Index)
+#
+# # 获取列名的前7个字符
+# col_prefix <- substr(colnames(GSE144735), 1, 7)
+# # 根据前7个字符切割数据框
+# split_data <- lapply(unique(col_prefix), function(prefix) {
+#   selected_columns <- grep(paste0("^", prefix), colnames(GSE144735))
+#   GSE144735 %>%
+#     select(all_of(selected_columns))
+# })
+# # 对切割后的数据框进行命名
+# names(split_data) <- unique(col_prefix)
+#
+# # 假设 split_data 是之前切割得到的数据框列表
+# split_data <- lapply(split_data, function(df) {
+#   if (any(substr(names(df), 7, 7) %in% c("T"))) {
+#     return(df)
+#   } else {
+#     return(NULL)
+#   }
+# })
+# # 去除 NULL 值
+# split_data <- split_data[!sapply(split_data, is.null)]
+#
+# seurat_obj_list_GSE144735 <- list()
+# # 假设 split_data 是你的数据框列表
+# for (df_name in names(split_data)) {
+#   # 从数据框列表中获取数据框
+#   df <- split_data[[df_name]]
+#
+#   # 创建 Seurat 对象
+#   seurat_obj <- CreateSeuratObject(counts = df, project = df_name, min.cells = 3, min.features = 200)
+#
+#   # 将 Seurat 对象保存在一个列表中，可以根据需要进一步处理
+#   seurat_obj_list_GSE144735[[df_name]] <- seurat_obj
+# }
+```
+# 创建对象
+# GSE16555
+
+```{r}
+# rownames(GSE16555_71) <- GSE16555_71$gene
+# GSE16555_71 <- GSE16555_71 %>%
+#         select(-gene)
+# rownames(GSE16555_81) <- GSE16555_81$gene
+# GSE16555_81 <- GSE16555_81 %>%
+#         select(-gene)
+# rownames(GSE16555_91) <- GSE16555_91$gene
+# GSE16555_91 <- GSE16555_91 %>%
+#         select(-gene)
+# rownames(GSE16555_92) <- GSE16555_92$gene
+# GSE16555_92 <- GSE16555_92 %>%
+#         select(-gene)
+# rownames(GSE16555_12) <- GSE16555_12$gene
+# GSE16555_12 <- GSE16555_12 %>%
+#         select(-gene)
+# rownames(GSE16555_13) <- GSE16555_13$gene
+# GSE16555_13 <- GSE16555_13 %>%
+#         select(-gene)
+# rownames(GSE16555_14) <- GSE16555_14$gene
+# GSE16555_14 <- GSE16555_14 %>%
+#         select(-gene)
+# rownames(GSE16555_16) <- GSE16555_16$gene
+# GSE16555_16 <- GSE16555_16 %>%
+#         select(-gene)
+# rownames(GSE16555_17) <- GSE16555_17$gene
+# GSE16555_17 <- GSE16555_17 %>%
+#         select(-gene)
+# rownames(GSE16555_20) <- GSE16555_20$gene
+# GSE16555_20 <- GSE16555_20 %>%
+#         select(-gene)
+# rownames(GSE16555_21) <- GSE16555_21$gene
+# GSE16555_21 <- GSE16555_21 %>%
+#         select(-gene)
+# rownames(GSE16555_25) <- GSE16555_25$gene
+# GSE16555_25 <- GSE16555_25 %>%
+#         select(-gene)
+# rownames(GSE16555_26) <- GSE16555_26$gene
+# GSE16555_26 <- GSE16555_26 %>%
+#         select(-gene)
+#
+# GSE16555_71 <- CreateSeuratObject(counts = GSE16555_71, project = "GSE16555_71", min.cells = 3, min.features = 200)
+# GSE16555_81 <- CreateSeuratObject(counts = GSE16555_81, project = "GSE16555_81", min.cells = 3, min.features = 200)
+# GSE16555_91 <- CreateSeuratObject(counts = GSE16555_91, project = "GSE16555_91", min.cells = 3, min.features = 200)
+# GSE16555_92 <- CreateSeuratObject(counts = GSE16555_92, project = "GSE16555_92", min.cells = 3, min.features = 200)
+# GSE16555_12 <- CreateSeuratObject(counts = GSE16555_12, project = "GSE16555_12", min.cells = 3, min.features = 200)
+# GSE16555_13 <- CreateSeuratObject(counts = GSE16555_13, project = "GSE16555_13", min.cells = 3, min.features = 200)
+# GSE16555_14 <- CreateSeuratObject(counts = GSE16555_14, project = "GSE16555_14", min.cells = 3, min.features = 200)
+# GSE16555_16 <- CreateSeuratObject(counts = GSE16555_16, project = "GSE16555_16", min.cells = 3, min.features = 200)
+# GSE16555_17 <- CreateSeuratObject(counts = GSE16555_17, project = "GSE16555_17", min.cells = 3, min.features = 200)
+# GSE16555_20 <- CreateSeuratObject(counts = GSE16555_20, project = "GSE16555_20", min.cells = 3, min.features = 200)
+# GSE16555_21 <- CreateSeuratObject(counts = GSE16555_21, project = "GSE16555_21", min.cells = 3, min.features = 200)
+# GSE16555_25 <- CreateSeuratObject(counts = GSE16555_25, project = "GSE16555_25", min.cells = 3, min.features = 200)
+# GSE16555_26 <- CreateSeuratObject(counts = GSE16555_26, project = "GSE16555_26", min.cells = 3, min.features = 200)
+# seurat_obj_list_GSE16555 <- list(GSE16555_71, GSE16555_81, GSE16555_91, GSE16555_92, GSE16555_12, GSE16555_13, GSE16555_14, GSE16555_16, GSE16555_17, GSE16555_20, GSE16555_21, GSE16555_25, GSE16555_26)
+```
+# 转移细胞
+```{r}
+
+GSE_5784 <- CreateSeuratObject(counts = GSE_5784, project = "GSE_5784", min.cells = 3, min.features = 200)
+GSE_5915 <- CreateSeuratObject(counts = GSE_5915, project = "GSE_5915", min.cells = 3, min.features = 200)
+GSE_6198 <- CreateSeuratObject(counts = GSE_6198, project = "GSE_6198", min.cells = 3, min.features = 200)
+GSE_6335 <- CreateSeuratObject(counts = GSE_6335, project = "GSE_6335", min.cells = 3, min.features = 200)
+GSE_6593 <- CreateSeuratObject(counts = GSE_6593, project = "GSE_6593", min.cells = 3, min.features = 200)
+GSE_6648 <- CreateSeuratObject(counts = GSE_6648, project = "GSE_6648", min.cells = 3, min.features = 200)
+GSE_8640 <- CreateSeuratObject(counts = GSE_8640, project = "GSE_8640", min.cells = 3, min.features = 200)
+GSE_5784$ID1 <- rownames(GSE_5784@meta.data)
+GSE_5784@meta.data<-GSE_5784@meta.data %>%
+        mutate(ID6 = "tumor") %>%
+        mutate(orig.ident1 = orig.ident) %>%
+        separate(orig.ident1, into = c("ID3", "ID4"), sep = "_") %>%
+        unite(ID5,ID4,ID6)%>%
+        unite(ID,ID5,ID1)
+GSE_5784@meta.data<- GSE_5784@meta.data[,c("orig.ident","nCount_RNA","nFeature_RNA","ID")]
+
+GSE_5915$ID1 <- rownames(GSE_5915@meta.data)
+GSE_5915@meta.data<-GSE_5915@meta.data %>%
+        mutate(ID6 = "tumor") %>%
+        mutate(orig.ident1 = orig.ident) %>%
+        separate(orig.ident1, into = c("ID3", "ID4"), sep = "_") %>%
+        unite(ID5,ID4,ID6)%>%
+        unite(ID,ID5,ID1)%>%
+        select(orig.ident,nCount_RNA,nFeature_RNA,ID)
+
+GSE_6198$ID1 <- rownames(GSE_6198@meta.data)
+GSE_6198@meta.data<-GSE_6198@meta.data %>%
+        mutate(ID6 = "tumor") %>%
+        mutate(orig.ident1 = orig.ident) %>%
+        separate(orig.ident1, into = c("ID3", "ID4"), sep = "_") %>%
+        unite(ID5,ID4,ID6)%>%
+        unite(ID,ID5,ID1)%>%
+        select(orig.ident,nCount_RNA,nFeature_RNA,ID)
+
+GSE_6335$ID1 <- rownames(GSE_6335@meta.data)
+GSE_6335@meta.data<-GSE_6335@meta.data %>%
+        mutate(ID6 = "tumor") %>%
+        mutate(orig.ident1 = orig.ident) %>%
+        separate(orig.ident1, into = c("ID3", "ID4"), sep = "_") %>%
+        unite(ID5,ID4,ID6)%>%
+        unite(ID,ID5,ID1)%>%
+        select(orig.ident,nCount_RNA,nFeature_RNA,ID)
+
+GSE_6593$ID1 <- rownames(GSE_6593@meta.data)
+GSE_6593@meta.data<-GSE_6593@meta.data %>%
+        mutate(ID6 = "tumor") %>%
+        mutate(orig.ident1 = orig.ident) %>%
+        separate(orig.ident1, into = c("ID3", "ID4"), sep = "_") %>%
+        unite(ID5,ID4,ID6)%>%
+        unite(ID,ID5,ID1)%>%
+        select(orig.ident,nCount_RNA,nFeature_RNA,ID)
+
+GSE_6648$ID1 <- rownames(GSE_6648@meta.data)
+GSE_6648@meta.data<-GSE_6648@meta.data %>%
+        mutate(ID6 = "tumor") %>%
+        mutate(orig.ident1 = orig.ident) %>%
+        separate(orig.ident1, into = c("ID3", "ID4"), sep = "_") %>%
+        unite(ID5,ID4,ID6)%>%
+        unite(ID,ID5,ID1)%>%
+        select(orig.ident,nCount_RNA,nFeature_RNA,ID)
+
+GSE_8640$ID1 <- rownames(GSE_8640@meta.data)
+GSE_8640@meta.data<-GSE_8640@meta.data %>%
+        mutate(ID6 = "tumor") %>%
+        mutate(orig.ident1 = orig.ident) %>%
+        separate(orig.ident1, into = c("ID3", "ID4"), sep = "_") %>%
+        unite(ID5,ID4,ID6)%>%
+        unite(ID,ID5,ID1)%>%
+        select(orig.ident,nCount_RNA,nFeature_RNA,ID)
+
+
+
+
+meta_seurat_list <- list(GSE_5784, GSE_5915, GSE_6198, GSE_6335, GSE_6593, GSE_6648, GSE_8640)
+```
+
+
+
+# seurat对象合并
+
+```{r}
+# list_GSE16555_id <-
+# list_GSE16555 <- merge(x = seurat_obj_list_GSE16555[[1]], y = seurat_obj_list_GSE16555[-1], add.cell.ids = names(seurat_obj_list_GSE16555)[-1],merge.data = TRUE)
+#meta_seurat_list_copy <- meta_seurat_list
+#meta_seurat_list <- meta_seurat_list_copy
+meta_seurat_list <- merge(x = meta_seurat_list[[1]], y = meta_seurat_list[-1],merge.data = TRUE)
+meta_seurat_list$Group = "Metastasis"
+# meta_seurat_list <- PercentageFeatureSet(meta_seurat_list, "^MT-", col.name = "pMT")
+#读
+meta_annotatiom<- mCRC_cell_labels_3
+colnames(meta_annotatiom) <- c("ID","Pation","Sample","Cell_type")
+meta_annotatiom<-meta_annotatiom%>%
+        mutate(Cell_subtype="unknown") %>%
+        select(ID,Cell_type,Cell_subtype)
+# meta_annotatiom_copy <- meta_annotatiom
+c=rownames(meta_seurat_list@meta.data)
+meta_seurat_list@meta.data<-meta_seurat_list@meta.data %>%
+        left_join(meta_annotatiom, by = "ID")
+rownames(meta_seurat_list@meta.data)<-c
+# meta_seurat_list_copy <- meta_seurat_list
+
+
+# meta_seurat_list<- meta_seurat_list_copy
+meta_seurat_list$mitoRatio <- PercentageFeatureSet(object = meta_seurat_list, pattern = "^MT-")
+
+
+#########################
+list_GSE132465 <- merge(x = seurat_obj_list_GSE132465[[1]], y = seurat_obj_list_GSE132465[-1],merge.data = TRUE)
+list_GSE132465$Group = "Primary"
+#读
+GSE132465_annotatiom <- GSE132465_GEO_processed_CRC_10X_cell_annotation
+GSE132465_annotatiom$Cell_subtype <- case_when(
+        GSE132465_annotatiom$Cell_subtype %in% c("CD8+ T cells") ~ "CD8 T cells",
+        GSE132465_annotatiom$Cell_subtype %in% c("CMS1","CMS2","CMS3","CMS4") ~ "Tumor cells",
+        TRUE ~ "other cell"
+)
+colnames(GSE132465_annotatiom) <- c("ID","Pation","Sample","Condition","Cell_type","Cell_subtype")
+GSE132465_annotatiom <- GSE132465_annotatiom %>%
+        select(ID,Cell_type,Cell_subtype)
+list_GSE132465$ID <- rownames(list_GSE132465@meta.data)
+list_GSE132465@meta.data<-list_GSE132465@meta.data %>%
+        left_join(GSE132465_annotatiom, by = "ID")
+rownames(list_GSE132465@meta.data)<- list_GSE132465$ID
+list_GSE132465@meta.data<-list_GSE132465@meta.data %>%
+        select(orig.ident,nCount_RNA,nFeature_RNA,ID,Group,Cell_type,Cell_subtype)
+#list_data <- list(list_GSE16555, list_GSE144735, list_GSE132465)
+# list_GSE132465_copy <- list_GSE132465
+# meta_seurat_list_copy <- meta_seurat_list
+# rownames(list_GSE132465@meta.data) <- Cells(list_GSE132465)
+# rownames(meta_seurat_list@meta.data) <- Cells(meta_seurat_list)
+
+########################################################
+# meta_seurat_list_copy <- meta_seurat_list
+# list_GSE132465_copy <- list_GSE132465
+# meta_seurat_list$mitoRatio <- PercentageFeatureSet(object = meta_seurat_list, pattern = "^MT-")
+# list_GSE132465$mitoRatio <- PercentageFeatureSet(object = list_GSE132465, pattern = "^MT-")
+
+
+list_data <- list(meta_seurat_list, list_GSE132465)
+sce <- merge(x = list_data[[1]], y = list_data[-1], merge.data = TRUE)
+sce1 <- sce
+# s <- PercentageFeatureSet(list_GSE132465, "^MT-", col.name = "pMT")
+# saveRDS(sce, file = "/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/colon_cancer/data/sce.RData")
+```
+# 将对象读取取子集
+
+```{r}
+# sce <- readRDS("/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/colon_cancer/data/sce.RData")
+# sce_filtered <- sce@meta.data %>%
+#   filter(!grepl("N", orig.ident)) %>%
+#   filter(!grepl("B", orig.ident))
+# sce <- subset(sce, subset = orig.ident %in% sce_filtered$orig.ident)
+# table(sce$orig.ident)
+# sce$Group = case_when(
+#   sce$orig.ident %in% c("SMC21-T","SMC25-T","KUL21-T") ~ "Metastasis",
+#   TRUE ~ "Primary"
+# )
+# sce1 <- subset(sce, subset = orig.ident %in% c("SMC21-T","SMC25-T","KUL01-T","KUL19-T","KUL21-T","KUL28-T","KUL30-T","KUL31-T"))
+# sce <- sce1
+# saveRDS(sce, file = "/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/colon_cancer/data/sce_begin.RData")
+```
+
+# filter low quality gene
+```{r}
+sce <- readRDS("/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/colon_cancer/data/sce.RData")
+mito_genes <- rownames(sce)[grep("^MT-", rownames(sce))]
+sce <- PercentageFeatureSet(sce, "^MT-", col.name = "pMT")
+sce[["percent.mt"]] <- PercentageFeatureSet(sce, pattern = "^MT-")
+nFeature_lower <- 200
+nFeature_upper <- 8000
+selected_c <- WhichCells(sce, expression = nFeature_RNA > nFeature_lower & nFeature_RNA < nFeature_upper)
+VlnPlot(sce, features = c("nCount_RNA", "nFeature_RNA", "pMT"), group.by = "orig.ident")
+pMT_upper <- 15
+selected_mito <- WhichCells(sce, expression = pMT < pMT_upper)
+sce <- subset(sce, cells = selected_mito)
+```
+
+
+# run PCA reduction
+```{r}
+sce <- NormalizeData(sce)
+sce <- FindVariableFeatures(sce)
+sce <- ScaleData(sce)
+sce <- RunPCA(sce,npcs = 30,verbose = FALSE)
+sce <- FindNeighbors(sce, dims = 1:30, reduction = "pca")
+sce <- FindClusters(sce, resolution = 1, cluster.name = "pca_umap")
+sce <- RunUMAP(sce, reduction = "pca", dims = 1:30, reduction.name = "pca_umap")
+```
+# select the intergrated method
+## CCA
+```{r}
+options(future.globals.maxSize = 1000 * 1024^16)
+sce <- IntegrateLayers(object = sce, method = CCAIntegration,
+                       orig.reduction = "pca", new.reduction = "integrated.cca",
+                       verbose = FALSE)
+sce <- FindNeighbors(sce, reduction = "integrated.cca", dims = 1:30)
+sce <- RunUMAP(sce, reduction = "integrated.cca", dims = 1:30, reduction.name = "integrated.cca")
+DimPlot(sce, reduction = "pca_umap", group.by = "Group")
+DimPlot(sce, reduction = "pca_umap", group.by = "Group")
+DimPlot(sce, reduction = "integrated.cca", group.by = "Group")
+DimPlot(sce,group.by = "orig.ident", reduction = "integrated.cca")
+```
+
+## harmony
+```{r}
+sce <- IntegrateLayers(
+  object = sce, method = HarmonyIntegration,
+  orig.reduction = "pca", new.reduction = "harmony",
+  verbose = FALSE,
+  meta_data = meta_data,
+  group.by.vars = c("orig.ident", "Group")
+)
+sce <- FindNeighbors(sce, reduction = "harmony", dims = 1:30)
+sce <- RunUMAP(sce, reduction = "harmony", dims = 1:30, reduction.name = "harmony")
+DimPlot(sce, reduction = "pca_umap", group.by = "Group")
+DimPlot(sce, reduction = "harmony", group.by = "Group")
+
+```
+## rpca
+```{r}
+sce <- IntegrateLayers(object = sce, method = RPCAIntegration,
+                       orig.reduction = "pca", new.reduction = 'integrated.rpca',
+                       verbose = FALSE,
+                       k.weight = 50
+
+
+)
+sce <- FindNeighbors(sce, reduction = "integrated.rpca", dims = 1:30)
+sce <- RunUMAP(sce, reduction = "integrated.rpca", dims = 1:30, reduction.name = "integrated.rpca")
+DimPlot(sce, reduction = "pca_umap", group.by = "Group")
+DimPlot(sce, reduction = "integrated.rpca", group.by = "Group")
+#begin
+# saveRDS(sce,file = "/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/colon_cancer/data/sce_debatch.RData")
+```
+# select the reduction method and cluster and find markers
+```{r}
+for (i in seq(0.1, 2, 0.1)) {
+  sce <- FindClusters(sce, resolution = i)
+  print(DimPlot(sce, reduction = "integrated.cca") +
+          labs(title = paste0("resolution: ", i)))
+}
+clustree(sce)
+DimPlot(sce, reduction = "integrated.cca", group.by = "RNA_snn_res.1.4")
+
+sce <- JoinLayers(sce)
+DefaultAssay(sce) <- "RNA"
+Idents(sce) <- sce$RNA_snn_res.1.4
+all.markers <- FindAllMarkers(sce,
+                              only.pos = TRUE,
+                              min.pct = 0.1,
+                              logfc.threshold = 0.25)
+significant.markers <- all.markers[all.markers$p_val_adj < 0.05,]
+```
+# save data before annotation
+```{r}
+saveRDS(sce, file = "/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/colon_cancer/data/sce_before_annotation.RData")
+saveRDS(all.markers, file = "/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/colon_cancer/data/before_annotation_all.markers.RData")
+saveRDS(significant.markers, file = "/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/colon_cancer/data/before_annotation_significant.markers.RData")
+write.csv(significant.markers, file = "/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/colon_cancer/data/before_annotation_significant.markers.csv")
+```
+
+#######################
+# read the sce data and markers
+```{r}
+#begin
+sce <- readRDS("/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/colon_cancer/data/sce_before_annotation.RData")
+```
+# CNV infer
+```{r}
+exp.rawdata <- as.matrix(sce[["RNA"]]$counts)
+copykat.test <- copykat(rawmat = exp.rawdata, id.type = "S", ngene.chr = 5, win.size = 25, KS.cut = 0.1, sam.name = "test", distance = "euclidean", norm.cell.names = "", output.seg = "FLASE", plot.genes = "TRUE", genome = "hg20", n.cores = 30)
+saveRDS(copykat.test, file = "/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/colon_cancer/data/copykat.test.RData")
+```
+# read cnv and add to seurat object
+```{r}
+copykat.test <- readRDS("/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/colon_cancer/data/copykat.test.RData")
+mallignant <- data.frame(copykat.test$prediction)
+mallignant <- mallignant[!duplicated(mallignant$cell.names),]
+rownames(mallignant) <- mallignant$cell.names
+sce <- AddMetaData(sce, metadata = mallignant)
+p1 <- DimPlot(sce, group.by = 'copykat.pred') + scale_color_manual(values = c("gray", "red", 'blue'))
+p2 <- DimPlot(sce)
+pc <- p1 + p2
+pc
+ggsave('umap.pdf', pc, width = 12, height = 5)
+```
+# cell annotation manual
+## GBM
+EGFR/SOX2/PTPRZ1
+## pan-immune(contrl)
+PTPRC/CD45
+## myeloid
+SPI1/PU.1/CD68/APBB1IP/CD74
+## oligodendrocyte
+OLIG2/MBP/CTNNA3
+## lymphoid
+CD3G/CD3, MS4A1/CD20
+
+
+#########################
+CellMiner是基于NCI-60细胞系预测靶基因药物敏感性的工具
+colon cancer annotation and metastasis
+#癌细胞：“EPCAM”、“CD24”、“CDH1”、“KRT18”，"KRT19"
+上皮细胞：EPCAM（3），KRT8,KRT18（2）、CD24
+#基质细胞（成纤维细胞）：COL1A1,COL1A2,COL6A1,COL6A2,VWF,PLVAP,CDHS,S100B
+成纤维细胞：COL1A2（2）、COL3A1、MYH11 、ACTA2
+骨髓细胞 ：CD68（2）、XCR1、CLEC9A、CLEC1OA、CD1C、S100A8、S100A9、TPSAB1、OSM 、LYZ、AIF1和C1QB、CD14
+T细胞：NKG7、KLRC1、 CCR7、FOXP3、CTLA4、 CDSB、CXCR6和CD3D（3）、CD3E（2）和CD3G、TRAC、TRBC1
+#  CD8+T细胞：GZMA, GZMB, GZMK, GZMH, GNLY, PRF1, IFNG, NKG7, KLRK1, KLRB1, KLRD1, CTSW, CST7, CCL4, and CCL3
+B细胞：MZB1(2)、IGHA1、CD19和AICDA和MS4A1（2）、CD79A（2）和CD79B（2）、TNFRSF17
+内皮细胞：CLDN5、PECAM1（2）、 VWF(2)和CDH5
+other
+#肥大细胞：CPA3、TPSAB1和TPSB2
+
+
+```{r}
+DotPlot(sce, features = c("EPCAM","KRT8","KRT18","CD24",#上皮细胞
+                          "COL1A2","COL3A1","MYH11","ACTA2",#成纤维细胞
+                          "CD68,XCR1,CLEC9A","CLEC1OA","CD1C","S100A8","S100A9","TPSAB1","OSM","LYZ","AIF1","C1QB","CD14",#骨髓细胞
+                          "NKG7","KLRC1","CCR7","FOXP3","CTLA4","CDSB","CXCR6","CD3D","CD3E","CD3G","TRAC","TRBC1",#T细胞
+                          "MZB1","IGHA1","CD19","AICDA","MS4A1","CD79A","CD79B","TNFRSF17",#B细胞
+                          "CLDN5","PECAM1","VWF","CDH5"), group.by = "RNA_snn_res.1.4")#内皮细胞
+```
+
+```{r}
+DotPlot(sce, features = c('EGFR', 'SOX2', 'PTPRZ1', 'PTPRC', 'CD45', 'SPI1', 'PU.1', 'CD68', 'APBB1IP', 'CD74', 'OLIG2', 'MBP', 'CTNNA3', 'CD3G', 'CD3', 'MS4A1', 'CD20'), group.by = "RNA_snn_res.1.4")
+
+```
+# annotation
+## GBM
+#EGFR/SOX2/PTPRZ1
+## pan-immune(contrl)
+#PTPRC/CD45
+## myeloid
+#SPI1/PU.1/CD68/APBB1IP/CD74
+## oligodendrocyte
+#OLIG2/MBP/CTNNA3
+## lymphoid
+#CD3G/CD3, MS4A1/CD20
+```{r}
+sce$first_cell_type = case_when(
+  sce$RNA_snn_res.1.4 %in% c(0,2,3,5,12,14,15,20,22) ~ "epithelial cells",
+  sce$RNA_snn_res.1.4 %in% c(18,24) ~ "Fibroblasts",
+  sce$RNA_snn_res.1.4 %in% c(7,13,17,25,26,29) ~ "myeloid cells",
+  sce$RNA_snn_res.1.4 %in% c(1,4,6,8,21) ~ "T cells",
+  sce$RNA_snn_res.1.4 %in% c(9,11) ~ "B cells",
+  sce$RNA_snn_res.1.4 %in% c(23) ~ "endothelial cells",
+  sce$RNA_snn_res.1.4 %in% c(10,19,27) ~ "CD8 T cells",
+  sce$RNA_snn_res.1.4 %in% c(16,28) ~ "others"
+)
+DimPlot(sce, reduction = "integrated.cca", group.by = 'Group')
+# DimPlot(sce, reduction = "integrated.cca", group.by = 'copykat.pred')
+DimPlot(sce, reduction = "integrated.cca", group.by = "first_cell_type")
+DimPlot(sce, reduction = "integrated.cca", group.by = "RNA_snn_res.1.4")
+```
+# CNV self(TODO)
+```{r}
+
+```
+# cell ratio
+```{r}
+table(sce$orig.ident, sce$cell_type) %>% heatmap()
+percent <- table(sce$orig.ident, sce$cell_type) %>% as.data.frame()
+table(sce$orig.ident, sce$cell_type)
+table(sce$orig.ident, sce$cell_type) %>%
+  prop.table(margin = 1) %>%
+  colSums()
+table(sce$orig.ident, sce$cell_type) %>%
+  prop.table(margin = 1) %>%
+  rowSums()
+Cellratio <- table(sce$orig.ident, sce$cell_type) %>%
+  prop.table(margin = 1) %>%
+  as.data.frame()
+Cellratio <- rename(Cellratio, sample = Var1, celltype = Var2)
+colourCount = length(unique(Cellratio$sample))
+ggplot(Cellratio) +
+  geom_bar(aes(x = Freq, y = sample, fill = celltype), stat = "identity", width = 0.7, size = 0.5, colour = '#222222') +
+  theme_classic() +
+  labs(x = 'Sample', y = 'Ratio') +
+  coord_flip() +
+  theme(panel.border = element_rect(fill = NA, color = "black", size = 0.5, linetype = 0))
+
+
+```
+# save sce
+```{r}
+#saveRDS(sce, file = "/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/sce_annotation.RData")
+# saveRDS(sce, file = "/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/sce_annotation_again.RData")
+```
+#read sce
+```{r}
+#sce <- readRDS("/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/sce_annotation.RData")
+sce <- readRDS("/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/sce_annotation_again.RData")
+```
+
+# extract the GBM cell
+```{r}
+#Mali <- subset(sce, subset = cell_type %in% c('GBM') & copykat.pred %in% c('aneuploid'))
+Mali <- subset(sce, subset = cell_type %in% c('GBM'))
+Mali <- SplitObject(Mali, split.by = "orig.ident")
+Mali <- merge(x = Mali$Sample1, y = list(Mali$Sample2, Mali$Sample3, Mali$Sample4, Mali$Sample5, Mali$Sample6, Mali$Sample7, Mali$Sample8, Mali$Sample9, Mali$Sample10))
+
+```
+# batch effect reduce
+```{r}
+Mali <- NormalizeData(Mali)
+Mali <- FindVariableFeatures(Mali)
+Mali <- ScaleData(Mali)
+Mali <- RunPCA(Mali,sce,npcs = 30,verbose = FALSE)
+Mali <- RunUMAP(Mali, reduction = "pca", dims = 1:30, reduction.name = "pca_umap")
+```
+# CCA
+```{r}
+Mali <- IntegrateLayers(object = Mali, method = CCAIntegration,
+                        orig.reduction = "pca", new.reduction = "integrated.cca",
+                        verbose = FALSE, k.weight = 80)
+Mali <- FindNeighbors(Mali, reduction = "integrated.cca", dims = 1:30)
+
+
+
+Mali <- RunUMAP(Mali, reduction = "integrated.cca", dims = 1:30, reduction.name = "integrated.cca")
+DimPlot(Mali, reduction = "pca_umap", group.by = "Group")
+#DimPlot(Mali, reduction = "pca_umap", group.by = "Group")
+DimPlot(Mali, reduction = "integrated.cca", group.by = "Group")
+```
+# select the proper resolution
+```{r}
+for (i in seq(0.1, 1, 0.1)) {
+  Mali <- FindClusters(Mali, resolution = i)
+  print(DimPlot(Mali, reduction = "integrated.cca") +
+          labs(title = paste0("Mali_resolution: ", i)))
+}
+clustree(Mali)
+DimPlot(Mali, reduction = "integrated.cca", group.by = "RNA_snn_res.0.8")
+
+Mali <- JoinLayers(Mali)
+DefaultAssay(Mali) <- "RNA"
+Idents(Mali) <- Mali$RNA_snn_res.0.8
+all.markers <- FindAllMarkers(Mali,
+                              only.pos = TRUE,
+                              min.pct = 0.1,
+                              logfc.threshold = 0.25)
+significant.markers <- all.markers[all.markers$p_val_adj < 0.05,]
+```
+# save data before annotation
+```{r}
+#saveRDS(Mali, file = "/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/Mali_sce_before_annotation.RData")
+#saveRDS(all.markers, file = "/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/Mali_before_annotation_all.markers.RData")
+#saveRDS(significant.markers, file = "/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/Mali_before_annotation_significant.markers.RData")
+```
+# Cancer cell annotation
+## read Mali data
+```{r}
+Mali <- readRDS(file = "/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/Mali_sce_before_annotation.RData")
+```
+
+## cell ratio(sample)
+```{r}
+table(Mali$orig.ident, Mali$RNA_snn_res.0.8) %>% heatmap()
+percent <- table(Mali$orig.ident, Mali$RNA_snn_res.0.8) %>% as.data.frame()
+table(Mali$orig.ident, Mali$RNA_snn_res.0.8) %>%
+  prop.table(margin = 1) %>%
+  colSums()
+table(Mali$orig.ident, Mali$RNA_snn_res.0.8) %>%
+  prop.table(margin = 1) %>%
+  rowSums()
+Cellratio <- table(Mali$orig.ident, Mali$RNA_snn_res.0.8) %>%
+  prop.table(margin = 1) %>%
+  as.data.frame()
+Cellratio <- rename(Cellratio, sample = Var1, cluster = Var2)
+colourCount = length(unique(Cellratio$sample))
+ggplot(Cellratio) +
+  geom_bar(aes(x = Freq, y = sample, fill = cluster), stat = "identity", width = 0.7, size = 0.5, colour = '#222222') +
+  theme_classic() +
+  labs(x = 'Sample', y = 'Ratio') +
+  coord_flip() +
+  theme(panel.border = element_rect(fill = NA, color = "black", size = 0.5, linetype = 0))
+```
+## cell ratio(Group)
+```{r}
+percent <- table(Mali$Group, Mali$RNA_snn_res.0.8) %>% as.data.frame()
+table(Mali$Group, Mali$RNA_snn_res.0.8) %>%
+  prop.table(margin = 1) %>%
+  colSums()
+table(Mali$Group, Mali$RNA_snn_res.0.8) %>%
+  prop.table(margin = 1) %>%
+  rowSums()
+Cellratio <- table(Mali$Group, Mali$RNA_snn_res.0.8) %>%
+  prop.table(margin = 1) %>%
+  as.data.frame()
+Cellratio <- rename(Cellratio, Group = Var1, cluster = Var2)
+colourCount = length(unique(Cellratio$Group))
+ggplot(Cellratio) +
+  geom_bar(aes(x = Freq, y = Group, fill = cluster), stat = "identity", width = 0.7, size = 0.5, colour = '#222222') +
+  theme_classic() +
+  labs(x = 'Sample', y = 'Ratio') +
+  coord_flip() +
+  theme(panel.border = element_rect(fill = NA, color = "black", size = 0.5, linetype = 0))
+#Cellratio_in_sample
+# 检查表格数据
+Cellratio_in_sample <- as.data.frame(table(Mali$RNA_snn_res.0.8, Mali$Group))
+names(Cellratio_in_sample) <- c("Samples", "celltype", "CellNumber")
+
+# 绘制图形
+ggplot(Cellratio_in_sample, aes(x = Samples, y = CellNumber, fill = celltype)) +
+  geom_bar(stat = "identity", position = "fill", width = 0.7, size = 0.5, colour = '#222222') +
+  theme_classic() +
+  labs(x = 'Sample', y = 'Ratio') +
+  coord_flip() +
+  theme(panel.border = element_rect(fill = NA, color = "black", size = 0.5, linetype = 0))
+#ratio table
+meta_ratio <- table(sce$Group)[1] / (table(sce$Group)[1] + table(sce$Group)[2])
+#0.2868774
+sub_group_cell_ratio <- spread(Cellratio_in_sample, key = celltype, value = CellNumber)
+sub_group_cell_ratio$persion = sub_group_cell_ratio$Metastatic / (sub_group_cell_ratio$Primary + sub_group_cell_ratio$Metastatic)
+```
+## cell annotation
+```{r}
+Mali$cell_sub_type = case_when(
+  Mali$RNA_snn_res.0.8 %in% c(6, 8, 3, 2) ~ "Primary_1",
+  Mali$RNA_snn_res.0.8 %in% c(5) ~ "Primary_2",
+  Mali$RNA_snn_res.0.8 %in% c(9) ~ "Metastatic_3",
+  Mali$RNA_snn_res.0.8 %in% c(0, 1) ~ "Metastatic_2",
+  Mali$RNA_snn_res.0.8 %in% c(7, 4) ~ "Metastatic_1",
+)
+```
+# save the Mali annotation data
+```{r}
+#saveRDS(Mali, file = "/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/Mali_annotation.RData")
+```
+# total cell merge
+## read the total cell merge data
+```{r}
+Mali <- readRDS("/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/Mali_annotation.RData")
+sce <- readRDS("/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/sce_annotation.RData")
+```
+## merge data1
+```{r}
+sub_cell_merge <- Mali@meta.data[, c(1, 20)]
+total_cell_merge <- sce@meta.data[, c(1, 19)]
+row_names1 <- row.names(sub_cell_merge)
+sub_cell_merge <- cbind(RowName = row_names1, sub_cell_merge)
+row_names2 <- row.names(total_cell_merge)
+total_cell_merge <- cbind(RowName = row_names2, total_cell_merge)
+#merge metadata
+cell_meta <- merge(total_cell_merge, sub_cell_merge, by = "RowName", all.x = TRUE)
+#bool = ifelse(is.na(cell_meta$cell_subtype),1,0)
+#total_cell_merge$bool = bool
+#total_cell_merge$cell_subtype = cell_meta$cell_subtype
+merge = merge(cell_meta, total_cell_merge, by.x = "RowName", by.y = "RowName")
+total_cell_merge$cell_finally = ifelse(is.na(merge$cell_sub_type), merge$cell_type.y, merge$cell_sub_type)
+```
+## merge to seurat
+```{r}
+total_cell_merge <- total_cell_merge[, -c(2, 3)]
+sce$id <- rownames(sce@meta.data)
+sce@meta.data <- merge(sce@meta.data, total_cell_merge, by.x = "id", by.y = "RowName")
+```
+## save finally data
+```{r}
+#saveRDS(sce, file = "/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/sce_finally.RData")
+```
+# high level annalysis
+```{r}
+sce <- readRDS("/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/sce_finally.RData")
+Mali <- readRDS("/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/Mali_annotation.RData")
+```
+```
+```
+# Pseudobulk
+### different expression accroding to the Group
+```{r}
+library(Libra)
+Cell <- rep("Malignant", nrow(Mali@meta.data))
+Mali$Cell <- Cell
+DE <- run_de(Mali, replicate_col = "orig.ident", cell_type_col = "Cell", label_col = "Group",
+             de_family = "pseudobulk",
+             de_method = "edgeR")
+logFC_cutoff <- 0.25
+DE$change <- as.factor(ifelse(DE$p_val < 0.05 & abs(DE$avg_logFC) > logFC_cutoff,
+                              ifelse(DE$avg_logFC > logFC_cutoff, 'UP', 'DOWN'), 'NOT'))
+DE$symbol <- DE$gene
+library(clusterProfiler)
+#BiocManager::install("org.Hs.eg.db",force = T)
+library(org.Hs.eg.db)
+s2e <- bitr(DE$symbol,
+            fromType = "SYMBOL",
+            toType = "ENTREZID",
+            OrgDb = org.Hs.eg.db)
+DE <- inner_join(DE, s2e, by = c("symbol" = "SYMBOL"))
+```
+# DE Function Analysis
+```{r}
+library(AnnotationDbi)
+library(DOSE)
+library(KEGGREST)
+gene_up <- DE[DE$change %in% "UP", "symbol"]
+gene_down <- DE[DE$change %in% "DOWN", "symbol"]
+gene_up <- as.character(na.omit(mapIds(x = org.Hs.eg.db,
+                                       keys = gene_up$symbol,
+                                       keytype = "SYMBOL",
+                                       column = "ENTREZID")))
+gene_down <- as.character(na.omit(mapIds(x = org.Hs.eg.db,
+                                         keys = gene_down$symbol,
+                                         keytype = "SYMBOL",
+                                         column = "ENTREZID")))
+gene_up = unique(gene_up)
+gene_down = unique(gene_down)
+kk.up <- enrichKEGG(gene = gene_up,
+                    organism = 'hsa',
+                    pvalueCutoff = 0.9,
+                    qvalueCutoff = 0.9)
+kk.down <- enrichKEGG(gene = gene_down,
+                      organism = 'hsa',
+                      #universe     = gene_all,
+                      pvalueCutoff = 0.9,
+                      qvalueCutoff = 0.9)
+kk.up@result <- kk.up@result[grep("^Meta", kk.up@result$category),]
+#transfer to gene symbol
+kk.up = setReadable(kk.up, OrgDb = 'org.Hs.eg.db', keyType = 'ENTREZID')
+
+kk.down@result <- kk.down@result[grep("^Meta", kk.down@result$category),]
+kk.down = setReadable(kk.down, OrgDb = 'org.Hs.eg.db', keyType = 'ENTREZID')
+
+#sava data
+#write.csv(kk.up@result, file = "/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/kk.up.csv")
+#write.csv(kk.down@result, file = "/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/kk.down.csv")
+```
+# plot the DE function
+```{r}
+dotplot(kk.up)
+dotplot(kk.down)
+```
+# get the DE genes as META_ACTIVATE
+```{r}
+META_ACTIVATE_up = kk.up@result %>%
+  filter(p.adjust < 0.05) %>%
+  select(ID, geneID)
+META_ACTIVATE_down = kk.down@result %>%
+  filter(p.adjust < 0.05) %>%
+  select(ID, geneID)
+META_ACTIVATE_up <- separate_rows(META_ACTIVATE_up, geneID, sep = "/")
+META_ACTIVATE_down <- separate_rows(META_ACTIVATE_down, geneID, sep = "/")
+META_ACTIVATE <- bind_rows(META_ACTIVATE_up, META_ACTIVATE_down)
+META_ACTIVATE$ID <- "META_ACTIVATE"
+#write.csv(META_ACTIVATE, file = "/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/META_ACTIVATE.csv")
+```
+# GeneSet GSEA Analysis
+```{r}
+data <- unique(as.vector(META_ACTIVATE$geneID))
+data <- as.data.frame(data)
+data$ENTREZID <- "META_ACTIVATE"
+data <- data[, c(2, 1)]
+META_ACTIVATE <- data
+colnames(META_ACTIVATE) <- c("term", "gene")
+gene <- unique(as.vector(DE$symbol))
+gene <- bitr(gene, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = "org.Hs.eg.db")
+gene_df <- data.frame(logFC = DE$avg_logFC,
+                      SYMBOL = DE$gene)
+gene_df <- merge(gene_df, gene, by = "SYMBOL")
+geneList <- gene_df$logFC
+names(geneList) <- gene_df$SYMBOL
+geneList <- sort(geneList, decreasing = TRUE)
+gsea <- GSEA(geneList, TERM2GENE = META_ACTIVATE)
+gseaplot2(gsea, "META_ACTIVATE", color = "red3", pvalue_table = T)
+#save(gsea, file = "/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/gsea.RData")
+```
+# AUCell score for each cell
+```{r}
+library(AUCell)
+geneSets <- list("META_ACTIVATE" = as.list(META_ACTIVATE[[2]]))
+exprMatrix <- as.matrix(Mali@assays$RNA$data)
+cells_rankings <- AUCell_buildRankings(exprMatrix, splitByBlocks = TRUE)
+cells_AUC <- AUCell_calcAUC(geneSets, cells_rankings, aucMaxRank = nrow(cells_rankings) * 0.1)
+cells_assignment <- AUCell_exploreThresholds(cells_AUC, plotHist = T, assign = TRUE)
+warningMsg <- sapply(cells_assignment, function(x) x$aucThr$comment)
+warningMsg[which(warningMsg == "")]
+sapply(cells_assignment, function(x) x$aucThr$selected)
+selectedThresholds <- getThresholdSelected(cells_assignment)
+cellsAssigned <- lapply(cells_assignment, function(x) x$assignment)
+assignmentTable <- reshape2::melt(cellsAssigned, value.name = "cell")
+colnames(assignmentTable)[2] <- "geneSet"
+head(assignmentTable)
+assignmentMat <- table(assignmentTable[, "geneSet"], assignmentTable[, "cell"])
+selectedThresholds <- getThresholdSelected(cells_assignment)
+# Mali@reductions[["integrated.cca"]]@cell.embeddings
+dat <- data.frame(Mali@meta.data, Mali@reductions[["integrated.cca"]]@cell.embeddings)
+umap <- data.frame(Mali@reductions[["integrated.cca"]]@cell.embeddings)
+umap <- as.matrix(umap)
+assignmentTable[1:4,]
+par(mfrow = c(1, 1))
+AUCell_plotTSNE(tSNE = umap, exprMat = exprMatrix,
+                cellsAUC = cells_AUC[c(1),], thresholds = selectedThresholds[c(1)])
+geneSet <- "META_ACTIVATE"
+aucs <- as.numeric(getAUC(cells_AUC)[geneSet,])
+Mali$AUC <- aucs
+par(mfrow = c(1, 1))
+umap <- data.frame(Mali@meta.data, Mali@reductions[["integrated.cca"]]@cell.embeddings)
+DimPlot(Mali, reduction = "integrated.cca", group.by = "cell_sub_type", label = T)
+```
+# meta_risk low and high
+```{r}
+Mali$meta_risk <- ifelse(Mali$AUC > 0.18, "METArisk_high", "METArisk_low")
+META_sub_cell_merge <- Mali@meta.data[, c(1, 23)]
+META_total_cell_merge <- sce@meta.data[, c(1, 20)]
+row.names(META_total_cell_merge) <- META_total_cell_merge[, 1]
+row_names1 <- row.names(META_sub_cell_merge)
+META_sub_cell_merge <- cbind(RowName = row_names1, META_sub_cell_merge)
+row_names2 <- row.names(META_total_cell_merge)
+META_total_cell_merge <- cbind(RowName = row_names2, META_total_cell_merge)
+#merge metadata
+META_cell_meta <- merge(META_total_cell_merge, META_sub_cell_merge, by = "RowName", all.x = TRUE)
+merge = merge(META_cell_meta, META_total_cell_merge, by.x = "RowName", by.y = "RowName")
+META_total_cell_merge$cell_annotation_with_META = ifelse(is.na(merge$meta_risk), merge$cell_type.y, merge$meta_risk)
+META_total_cell_merge <- META_total_cell_merge[, -c(2, 3)]
+sce$id <- rownames(sce@meta.data)
+sce@meta.data <- merge(sce@meta.data, META_total_cell_merge, by.x = "id", by.y = "RowName")
+```
+
+# Save the Mali data with AUC
+
+```{r}
+#saveRDS(Mali, file = "/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/Mali_with_META_risk.RData")
+#saveRDS(sce, file = "/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/sce_with_META_risk.RData")
+```
+
+# Cibersortx
+## Cibersortx data prepare
+## single cell data
+#insert
+sce$META_type <- case_when(
+sce$cell_annotation_with_META %in% c("METArisk_high") ~ "META_Activate" ,
+sce$cell_annotation_with_META %in% c("METArisk_low") ~ "META_Silent" ,
+TRUE ~ "Non_Malignant"
+)
+```{r}
+sce <- readRDS("/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/sce_with_META_risk.RData")
+exp_matrix = sce@assays$RNA$counts #表达矩阵
+cell_names = sce$META_type #细胞名字
+# #细胞名命名矩阵列明
+exp_matrix <- as.matrix(exp_matrix)
+# exp_matrix = as.data.frame(exp_matrix)
+# #exp_matrix_test = exp_matrix[, c(1:1000)]
+# GeneSymbol = rownames(exp_matrix)
+# exp_matrix <- cbind(GeneSymbol, exp_matrix)
+# write.table(exp_matrix, "/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/scRNAassay.txt", sep = "\t", row.names = FALSE, col.names = T)
+```
+## bulk cell data
+```{r}
+library(stringr)
+setwd("/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data")
+# library(easyTCGA)
+# getmrnaexpr("TCGA-GBM")
+TCGA_GBM_mrna_expr_counts = read.table("/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/output_mRNA_lncRNA_expr/TCGA-GBM_mrna_expr_counts.csv", header = T, sep = ",")
+rownames(TCGA_GBM_mrna_expr_counts) <- TCGA_GBM_mrna_expr_counts[, 1]
+TCGA_GBM_mrna_expr_counts <- TCGA_GBM_mrna_expr_counts[, -1]
+#get tumor sample
+index = as.numeric(str_sub(colnames(TCGA_GBM_mrna_expr_counts), 14, 15)) < 10
+TCGA_GBM_mrna_expr_counts = TCGA_GBM_mrna_expr_counts[, index]
+TCGA_GBM_mrna_expr_counts = as.matrix(TCGA_GBM_mrna_expr_counts)
+```
+
+
+## bulk sample deconvolution
+### method1()_BayesPrism
+```{r}
+# sce$META_stat <- case_when(
+# sce$cell_finally %in% c("Primary_1") ~ "Primary_1",
+# sce$cell_finally %in% c("Primary_2") ~ "Primary_2",
+# sce$cell_finally %in% c("Metastatic_1") ~ "Metastatic_1",
+# sce$cell_finally %in% c("Metastatic_2") ~ "Metastatic_2",
+# sce$cell_finally %in% c("Metastatic_3") ~ "Metastatic_3"),
+# TRUE ~ "Non_Malignant"
+# )
+sce$META_stat <- case_when(
+sce$cell_type %in% c("GBM") ~ "GBM",
+    TRUE ~ "Non_Malignant"
+)
+library(BayesPrism)
+bk.dat <- t(TCGA_GBM_mrna_expr_counts)
+sc.dat <- t(exp_matrix)
+# middle component
+c = intersect(colnames(bk.dat), colnames(sc.dat))
+bk.dat <- bk.dat[, c]
+sc.dat <- sc.dat[, c]
+#################
+cell.state.labels <- sce$META_type
+cell.type.labels <- sce$META_stat
+ls()
+dim(bk.dat)
+head(rownames(bk.dat))
+head(colnames(bk.dat))
+dim(bk.dat)
+dim(sc.dat)
+head(rownames(sc.dat))
+head(colnames(sc.dat))
+sort(table(cell.type.labels))
+sort(table(cell.state.labels))
+table(cbind.data.frame(cell.state.labels, cell.type.labels))
+plot.cor.phi(input = sc.dat,
+             input.labels = cell.state.labels,
+             title = "cell state correlation",
+             #specify pdf.prefix if need to output to pdf
+             #pdf.prefix="gbm.cor.cs",
+             cexRow = 0.2, cexCol = 0.2,
+             margins = c(2, 2))
+plot.cor.phi(input = sc.dat,
+             input.labels = cell.type.labels,
+             title = "cell type correlation",
+             #specify pdf.prefix if need to output to pdf
+             #pdf.prefix="gbm.cor.ct",
+             cexRow = 0.5, cexCol = 0.5,
+)
+sc.stat <- plot.scRNA.outlier(
+  input = sc.dat, #make sure the colnames are gene symbol or ENSMEBL ID
+  cell.type.labels = cell.type.labels,
+  species = "hs", #currently only human(hs) and mouse(mm) annotations are supported
+  return.raw = TRUE #return the data used for plotting.
+  #pdf.prefix="gbm.sc.stat" specify pdf.prefix if need to output to pdf
+)
+#> EMSEMBLE IDs detected.
+head(sc.stat)
+bk.stat <- plot.bulk.outlier(
+  bulk.input = bk.dat, #make sure the colnames are gene symbol or ENSMEBL ID
+  sc.input = sc.dat, #make sure the colnames are gene symbol or ENSMEBL ID
+  cell.type.labels = cell.type.labels,
+  species = "hs", #currently only human(hs) and mouse(mm) annotations are supported
+  return.raw = TRUE
+  #pdf.prefix="gbm.bk.stat" specify pdf.prefix if need to output to pdf
+)
+#> EMSEMBLE IDs detected.
+head(bk.stat)
+sc.dat.filtered <- cleanup.genes(input = sc.dat,
+                                 input.type = "count.matrix",
+                                 species = "hs",
+                                 gene.group = c("Rb", "Mrp", "other_Rb", "chrM", "MALAT1", "chrX", "chrY"),
+                                 exp.cells = 5)
+dim(sc.dat.filtered)
+#note this function only works for human data. For other species, you are advised to make plots by yourself.
+plot.bulk.vs.sc(sc.input = sc.dat.filtered,
+                bulk.input = bk.dat
+                #pdf.prefix="gbm.bk.vs.sc" specify pdf.prefix if need to output to pdf
+)
+#> EMSEMBLE IDs detected.
+sc.dat.filtered.pc <- select.gene.type(sc.dat.filtered,
+                                       gene.type = "protein_coding")
+#> EMSEMBLE IDs detected.
+#> number of genes retained in each category:
+#>
+#> protein_coding
+#>          16148
+
+# Select marker genes (Optional)
+# performing pair-wise t test for cell states from different cell types
+
+diff.exp.stat <- get.exp.stat(sc.dat = sc.dat[, colSums(sc.dat > 0) > 3], # filter genes to reduce memory use
+                              cell.type.labels = cell.type.labels,
+                              cell.state.labels = cell.state.labels,
+                              pseudo.count = 0.1, #a numeric value used for log2 transformation. =0.1 for 10x data, =10 for smart-seq. Default=0.1.
+                              cell.count.cutoff = 50, # a numeric value to exclude cell state with number of cells fewer than this value for t test. Default=50.
+                              n.cores = 30 #number of threads
+)
+
+sc.dat.filtered.pc.sig <- select.marker(sc.dat = sc.dat.filtered.pc,
+                                        stat = diff.exp.stat,
+                                        pval.max = 0.01,
+                                        lfc.min = 0.1)
+myPrism <- new.prism(
+  reference = sc.dat.filtered.pc,
+  mixture = bk.dat,
+  input.type = "count.matrix",
+  cell.type.labels = cell.type.labels,
+  cell.state.labels = cell.state.labels,
+  key = "GBM",
+  outlier.cut = 0.01,
+  outlier.fraction = 0.1,
+)
+bp.res <- run.prism(prism = myPrism, n.cores = 50)
+bp.res
+# bp.res.initial <- run.prism(prism = myPrism, n.cores=50, update.gibbs=FALSE)
+#
+# bp.res.update <- update.theta (bp = bp.res.initial)
+slotNames(bp.res)
+theta_type <- get.fraction(bp = bp.res,
+                      which.theta = "final",
+                      state.or.type = "type")
+theta_state <- get.fraction(bp = bp.res,
+                      which.theta = "final",
+                      state.or.type = "state")
+
+head(theta)
+Z.tumor <- get.exp(bp = bp.res,
+                   state.or.type = "type",
+                   cell.name = "GBM")
+
+head(t(Z.tumor[1:5,]))
+#saveRDS(bp.res, file="/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/bp.res.rdata")
+
+```
+#### method2()_MuSIC
+```{r}
+
+```
+### survival analysis
+#### combing the survival data
+```{r}
+# bulk sample cell ratio
+library(BayesPrism)
+library(tidyverse)
+bp.res <- readRDS("/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/bp.res.rdata")
+theta_state <- bp.res@posterior.initial.cellState@theta
+theta_state <- theta_state %>%
+        as.data.frame(.) %>%
+        mutate(sample = rownames(theta_state))
+theta_state1 <- theta_state %>%
+  gather(key = "cell_type", value = "cell_ratio", -sample)
+theta_state1$META_ratio <- as.numeric(theta_state1$META_ratio)
+theta_state1$cell_type <- as.factor(theta_state1$cell_type)
+library(tidyverse)
+library(ggplot2)
+p <- ggplot(theta_state1,mapping = aes(x = sample, y = cell_ratio, fill = cell_type)) +
+        geom_bar(stat = 'identity')
+
+
+library(devtools)
+devtools::install_github("junjunlab/scRNAtoolvis")
+library(scRNAtoolVis)
+
+
+
+
+theta_state <- as.data.frame(theta_state)
+theta_state$barcode <- rownames(theta_state)
+# bulk survival data
+clinical_data <-read.csv("/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/output_mRNA_lncRNA_expr/TCGA-GBM_clinical.csv")
+#days_to_last_follow_up ~ time
+#vital_status ~ event
+clinical_data <- clinical_data[, c("barcode","days_to_last_follow_up","vital_status")]
+colnames(clinical_data) <- c("barcode","time","event")
+clinical_data <- clinical_data %>%
+  filter(!grepl("Not Reported", event))
+clinical_data <- na.omit(clinical_data)
+# merge
+merge_data <- merge(clinical_data, theta_state, by = "barcode", all.x = TRUE)
+# class type
+merge_data$event <- as.numeric(merge_data$event)
+merge_data$time <- merge_data$time / 365
+group = ifelse(merge_data$META_Activate>median(merge_data$META_Activate,na.rm = T),"METArisk_high","METArisk_low")
+merge_data$META_type = ifelse(merge_data$META_Activate>median(merge_data$META_Activate,na.rm = T),"METArisk_high","METArisk_low")
+# merge_data$META_type <- as.factor(merge_data$META_type)
+# survival analysis
+table(group)
+library(survival)
+library(survminer)
+library(patchwork)
+sfit <- survfit(Surv(time, event)~META_type, data=merge_data)
+ggsurvplot(sfit,pval=TRUE)
+
+```
+# TCGA DEG
+```{r}
+library(readr)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+exprset1 <- read.csv("/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/output_mRNA_lncRNA_expr/TCGA-GBM_mrna_expr_counts.csv")
+rownames(exprset1) <- exprset1[, 1]
+exprset1 <- exprset1[, -1]
+table(str_sub(colnames(exprset1),14,15))
+Group = ifelse(as.numeric(str_sub(colnames(exprset1),14,15)) < 10,'tumor','normal')
+Group = factor(Group,levels = c("normal","tumor"))
+table(Group)
+
+library(limma)
+library(edgeR)
+design <- model.matrix(~0+Group)
+colnames(design)=levels(Group)
+rownames(design)=colnames(exprset1)
+
+dge <- DGEList(counts=exprset1) %>%
+  calcNormFactors()
+
+fit <- voom(dge, design, normalize="quantile") %>%
+  lmFit(design)
+
+constrasts = paste(rev(levels(Group)), collapse = "-")
+cont.matrix <- makeContrasts(contrasts = constrasts, levels = design)
+fit2 <- contrasts.fit(fit, cont.matrix) %>%
+  eBayes()
+
+DEG = topTable(fit2, coef=constrasts, n=Inf) %>%
+  na.omit()
+#write.csv(DEG, file = "/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/TCGA_DEG.csv")
+```
+# geneset interset
+```{r}
+DEG <- read.csv("/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/TCGA_DEG.csv")
+META_ACTIVATE <- read.csv("/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/META_ACTIVATE.csv")
+DEG <- DEG %>%
+    filter(adj.P.Val < 0.05)
+candicate <- intersect(DEG$X,META_ACTIVATE$geneID)
+```
+# mechine learning
+## clean data
+```{r}
+# bulk sample cell ratio
+library(tidyverse)
+tpm_data <- read.csv("/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/output_mRNA_lncRNA_expr/TCGA-GBM_mrna_expr_tpm.csv")
+rownames(tpm_data) <- tpm_data[, 1]
+tpm_data <- tpm_data[, -1]
+tpm_data <- t(tpm_data)
+tpm_data <- as.data.frame(tpm_data)
+data <- colnames(tpm_data)
+tpm_data$barcode <- rownames(tpm_data)
+tpm_data <- tpm_data %>%
+  select(barcode, everything())
+# bulk survival data
+clinical_data <-read.csv("/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/output_mRNA_lncRNA_expr/TCGA-GBM_clinical.csv")
+#days_to_last_follow_up ~ time
+#vital_status ~ event
+clinical_data <- clinical_data[, c("barcode","days_to_last_follow_up","vital_status")]
+colnames(clinical_data) <- c("barcode","time","event")
+clinical_data <- clinical_data %>%
+  filter(!grepl("Not Reported", event))
+clinical_data <- na.omit(clinical_data)
+# merge
+mechine_data <- merge(clinical_data, tpm_data, by = "barcode", all.x = TRUE)
+# class type
+mechine_data$event <- as.numeric(mechine_data$event)
+mechine_data$time <- mechine_data$time / 365
+
+```
+
+## SVM-rfe
+```{r}
+library(tidyverse)
+library(glmnet)
+source('/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_metastastis/code/msvmRFE.R')
+#BiocManager::install("VennDiagram")
+library(VennDiagram)
+#BiocManager::install("sigFeature")
+#BiocManager::install("caret")
+#BiocManager::install("randomForest")
+library(sigFeature)
+library(e1071)
+library(caret)
+library(randomForest)
+#interface
+#第一列放生存状态，行名为样本名
+DEG_p <- DEG %>%
+    filter(adj.P.Val < 0.05) %>%
+    select(X)
+DEG_p <- as.character(DEG_p$X)
+input <-mechine_data %>%
+        filter(!event == "NA") %>%
+        select(event,any_of(candicate))
+#code
+svmRFE(input, k = 5, halve.above = 100)
+
+nfold = 5
+nrows = nrow(input)
+folds = rep(1:nfold, len=nrows)[sample(nrows)]
+folds = lapply(1:nfold, function(x) which(folds == x))
+results = lapply(folds, svmRFE.wrap, input, k=5, halve.above=100) #特征选择，这里就开始跑了！
+
+top.features = WriteFeatures(results, input, save=F) #查看主要变量
+head(top.features)
+# write.csv(top.features,"/home/bioinfo/chipseq.320210927631/wangweitao/pycharm/glioblastoma_new/data/feature_svm.csv")
+
+# 小图这里呢选前48个变量进行SVM模型构建，体验一下
+featsweep = lapply(1:48, FeatSweep.wrap, results, input) #48个变量
+
+#画图
+no.info = min(prop.table(table(input[,1])))
+errors = sapply(featsweep, function(x) ifelse(is.null(x), NA, x$error))
+
+#dev.new(width=4, height=4, bg='white')
+#pdf("B_svm-error.pdf",width = 5,height = 5)
+PlotErrors(errors, no.info=no.info) #查看错误率
+
+
+#dev.off()
+
+#dev.new(width=4, height=4, bg='white')
+#pdf("B_svm-accuracy.pdf",width = 5,height = 5)
+Plotaccuracy(1-errors,no.info=no.info) #查看准确率
+
+
+#dev.off()
+
+# 图中红色圆圈所在的位置，即错误率最低点
+which.min(errors)
+top<-top.features[1:which.min(errors), "FeatureName"]
+write.csv(top,"top.csv")
+
+```
+# lasso
+```{r}
+library(tidyverse)
+
+library(broom)
+
+library(glmnet)
+
+```
+
+
+## random forest
+```{r}
+
+```
